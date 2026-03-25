@@ -1,4 +1,4 @@
-﻿fastapi
+fastapi
 uvicorn
 groq
 python-dotenv
@@ -10,4 +10,4 @@ PyMuPDF
 python-multipart
 Pillow
 typing-extensions
-tensorflow
+tflite-runtime
