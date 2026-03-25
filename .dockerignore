@@ -1,0 +1,9 @@
+# Bỏ qua các thư mục không cần thiết để build Docker nhanh hơn và nhẹ hơn
+.venv/
+.git/
+.env
+__pycache__/
+*.pyc
+.DS_Store
+hf_cache/
+*.keras
