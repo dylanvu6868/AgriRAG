@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agri-RAG — Hỏi đáp nông nghiệp (Bệnh lúa)</title>
+  <meta name="description" content="Agri-RAG: AI agricultural knowledge Q&A" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      /* ── Agricultural green/white palette ── */
+      --green-900: #14532d;
+      --green-800: #166534;
+      --green-700: #15803d;
+      --green-600: #16a34a;
+      --green-500: #22c55e;
+      --green-400: #4ade80;
+      --green-200: #bbf7d0;
+      --green-100: #dcfce7;
+      --green-50: #f0fdf4;
+
+      --white: #ffffff;
+      --gray-50: #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-300: #cbd5e1;
+      --gray-400: #94a3b8;
+      --gray-500: #64748b;
+      --gray-700: #334155;
+      --gray-900: #0f172a;
+
+      --earthy: #92400e;
+      /* amber accent for badges */
+      --sky: #0ea5e9;
+
+      --radius: 12px;
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+    }
+
+    /* ── Subtle leaf texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 10% 0%, rgba(34, 197, 94, 0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 100%, rgba(20, 83, 45, 0.06) 0%, transparent 60%);
+    }
+
+    /* ── Page wrapper ── */
+    .app-container {
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px;
+      background: var(--green-900);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-new-chat {
+      background: var(--green-700);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-new-chat:hover {
+      background: var(--green-600);
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .session-item {
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.8);
+      transition: background 0.2s;
+    }
+
+    .session-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .session-item.active {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-weight: 500;
+    }
+
+    .session-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.9rem;
+      flex: 1;
+    }
+
+    .btn-del-session {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .session-item:hover .btn-del-session {
+      display: block;
+    }
+
+    .btn-del-session:hover {
+      color: #ef4444;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* ── Sidebar collapse ── */
+    .sidebar {
+      overflow: hidden;
+      transition: width 0.28s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .sidebar.collapsed {
+      width: 0 !important;
+    }
+
+    .sidebar.collapsed .sidebar-header,
+    .sidebar.collapsed .session-list {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .sidebar-header,
+    .session-list {
+      transition: opacity 0.18s;
+    }
+
+    /* ── Toggle sidebar button ── */
+    .btn-toggle-sidebar {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.18s;
+      font-size: 1rem;
+    }
+
+    .btn-toggle-sidebar:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Put toggle inside header instead */
+    .header .btn-toggle-sidebar {
+      background: transparent;
+      border: 1px solid var(--gray-300);
+      color: var(--gray-600);
+    }
+
+    .header .btn-toggle-sidebar:hover {
+      background: var(--gray-100);
+      border-color: var(--green-400);
+      color: var(--green-700);
+    }
+
+    /* ── Main content ── */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: #f8fafc;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--gray-200);
+      z-index: 10;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+
+    .header-title {
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: var(--green-800);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .header-badge {
+      background: var(--green-50);
+      color: var(--green-800);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border: 1px solid var(--green-200);
+    }
+
+    /* ── Chat Area ── */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      scroll-behavior: smooth;
+    }
+
+    #chat-area::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #chat-area::-webkit-scrollbar-thumb {
+      background: var(--gray-300);
+      border-radius: 99px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 60px 24px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      width: 76px;
+      height: 76px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, var(--green-600), var(--green-800));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3), 0 0 0 6px rgba(22, 163, 74, 0.08);
+    }
+
+    .empty-state h2 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: var(--green-800);
+      letter-spacing: -0.02em;
+    }
+
+    .empty-state p {
+      font-size: 0.875rem;
+      color: var(--gray-500);
+      max-width: 400px;
+      line-height: 1.75;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    .chip {
+      cursor: pointer;
+      font-size: 0.78rem;
+      background: var(--white);
+      border: 1.5px solid var(--green-200);
+      border-radius: 20px;
+      padding: 7px 16px;
+      transition: all .18s;
+      color: var(--green-800);
+      font-weight: 500;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .chip:hover {
+      background: var(--green-600);
+      color: var(--white);
+      border-color: var(--green-600);
+      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+    }
+
+    /* ── Messages ── */
+    .msg {
+      display: flex;
+      gap: 10px;
+      animation: fadeUp .25s ease;
+    }
+
+    .msg.user {
+      flex-direction: row-reverse;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .av {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+    }
+
+    .av.user {
+      background: linear-gradient(135deg, var(--green-600), var(--green-800));
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .av.ai {
+      background: var(--white);
+      border: 1.5px solid var(--green-200);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    }
+
+    .bubble {
+      max-width: 60%;
+      background: var(--white);
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 11px 15px;
+      font-size: 0.875rem;
+      line-height: 1.7;
+      color: var(--gray-800);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .msg.user .bubble {
+      background: linear-gradient(135deg, var(--green-700), var(--green-800));
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(22, 101, 52, 0.25);
+    }
+
+    /* Markdown styling inside bubbles */
+    .bubble p {
+      margin-bottom: 0.5em;
+    }
+
+    .bubble p:last-child {
+      margin-bottom: 0;
+    }
+
+    .bubble ul,
+    .bubble ol {
+      margin-left: 1.25em;
+      margin-bottom: 0.5em;
+    }
+
+    .bubble li {
+      margin-bottom: 0.25em;
+    }
+
+    .bubble strong {
+      font-weight: 600;
+    }
+
+    .answer-text p {
+      margin-bottom: 0.6em;
+    }
+
+    .answer-text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .answer-text ul,
+    .answer-text ol {
+      margin-left: 1.25em;
+      margin-bottom: 0.6em;
+    }
+
+    .answer-text li {
+      margin-bottom: 0.3em;
+    }
+
+    .answer-text strong {
+      font-weight: 600;
+      color: var(--green-900);
+    }
+
+    /* ── Answer card ── */
+    .answer-card {
+      max-width: 65%;
+      background: var(--white);
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .answer-text {
+      font-size: 0.875rem;
+      line-height: 1.8;
+      color: var(--gray-800);
+    }
+
+    /* confidence */
+    .conf-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 0.69rem;
+      font-weight: 600;
+      border-radius: 20px;
+      padding: 3px 11px;
+    }
+
+    .badge.high {
+      background: var(--green-100);
+      color: var(--green-800);
+      border: 1px solid var(--green-200);
+    }
+
+    .badge.medium {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .badge.low {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .conf-reason {
+      font-size: 0.75rem;
+      color: var(--gray-500);
+    }
+
+    /* collapsibles */
+    .section {
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .sec-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 14px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--green-50);
+      font-size: 0.79rem;
+      font-weight: 600;
+      color: var(--green-800);
+      transition: background .15s;
+    }
+
+    .sec-head:hover {
+      background: var(--green-100);
+    }
+
+    .arrow {
+      transition: transform .22s;
+      font-size: 0.62rem;
+      color: var(--green-700);
+    }
+
+    .arrow.open {
+      transform: rotate(180deg);
+    }
+
+    .sec-body {
+      display: none;
+      padding: 12px 14px;
+      border-top: 1.5px solid var(--gray-200);
+      font-size: 0.79rem;
+      background: var(--white);
+    }
+
+    .sec-body.open {
+      display: block;
+    }
+
+    .step-bubble {
+      background: var(--green-50);
+      border-left: 2px solid var(--green-500);
+      padding: 6px 11px;
+      margin: 4px 0;
+      border-radius: 0 7px 7px 0;
+      font-size: 0.77rem;
+      color: var(--gray-700);
+      line-height: 1.6;
+    }
+
+    .sub-q {
+      display: inline-block;
+      background: var(--green-100);
+      border: 1px solid var(--green-200);
+      border-radius: 7px;
+      padding: 3px 9px;
+      margin: 2px 2px;
+      font-size: 0.75rem;
+      color: var(--green-800);
+    }
+
+    .src-chip {
+      display: inline-block;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 7px;
+      padding: 3px 9px;
+      margin: 2px 2px;
+      font-size: 0.73rem;
+      color: #1e40af;
+    }
+
+    .chunk-item {
+      margin: 8px 0;
+    }
+
+    .chunk-label {
+      font-size: 0.69rem;
+      color: var(--gray-400);
+      margin-bottom: 3px;
+    }
+
+    .chunk-text {
+      font-size: 0.75rem;
+      color: var(--gray-600);
+      line-height: 1.55;
+      background: var(--gray-50);
+      border-radius: 6px;
+      padding: 6px 10px;
+      border-left: 2px solid var(--gray-300);
+    }
+
+    /* typing */
+    .typing-dots {
+      display: flex;
+      gap: 4px;
+      padding: 3px 0;
+    }
+
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green-500);
+      opacity: .4;
+      animation: bounce .8s ease infinite;
+    }
+
+    .typing-dots span:nth-child(2) {
+      animation-delay: .13s;
+    }
+
+    .typing-dots span:nth-child(3) {
+      animation-delay: .26s;
+    }
+
+    @keyframes bounce {
+
+      0%,
+      100% {
+        transform: translateY(0);
+        opacity: .4;
+      }
+
+      50% {
+        transform: translateY(-5px);
+        opacity: 1;
+      }
+    }
+
+    /* stream cursor */
+    .cur {
+      display: inline-block;
+      width: 2px;
+      height: 0.83em;
+      background: var(--green-600);
+      margin-left: 1px;
+      animation: blink .55s infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0;
+      }
+    }
+
+    /* error */
+    .err-bubble {
+      background: #fff1f2;
+      border: 1.5px solid #fecaca;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      color: #991b1b;
+      max-width: 70%;
+    }
+
+    /* ── Input bar ── */
+    .input-wrap {
+      padding: 14px 28px 20px;
+      background: var(--white);
+      border-top: 1.5px solid var(--gray-200);
+      flex-shrink: 0;
+    }
+
+    .input-box {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: var(--gray-50);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 14px;
+      padding: 11px 14px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .input-actions {
+      display: flex;
+      gap: 4px;
+      padding-bottom: 2px;
+    }
+
+    .action-btn {
+      cursor: pointer;
+      font-size: 1.25rem;
+      color: var(--gray-500);
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 34px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    .action-btn:hover {
+      color: var(--green-600);
+      background: var(--green-100);
+    }
+
+    .input-box:focus-within {
+      border-color: var(--green-500);
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.1);
+      background: var(--white);
+    }
+
+    #qi {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--gray-900);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: none;
+      max-height: 130px;
+      min-height: 22px;
+      line-height: 1.5;
+    }
+
+    #qi::placeholder {
+      color: var(--gray-400);
+    }
+
+    #send {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--green-600), var(--green-800));
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 2px 6px rgba(22, 101, 52, 0.35);
+    }
+
+    #send:hover:not(:disabled) {
+      transform: scale(1.06);
+      box-shadow: 0 4px 12px rgba(22, 101, 52, 0.4);
+    }
+
+    #send:disabled {
+      opacity: .35;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    #send svg {
+      width: 15px;
+      height: 15px;
+      fill: white;
+    }
+
+    .input-hint {
+      text-align: center;
+      font-size: 0.67rem;
+      color: var(--gray-400);
+      margin-top: 7px;
+    }
+
+    /* ── Divider ── */
+    hr.sep {
+      border: none;
+      border-top: 1.5px solid var(--gray-200);
+      margin: 8px 0;
+    }
+
+    /* ── Right Detail Panel ── */
+    .dp-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      right: 380px;
+      z-index: 90;
+      background: transparent;
+    }
+
+    .dp-overlay.open {
+      display: block;
+    }
+
+    .detail-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 380px;
+      max-width: 92vw;
+      background: var(--white);
+      border-left: 1.5px solid var(--gray-200);
+      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.10);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateX(110%);
+      transition: transform 0.28s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .detail-panel.open {
+      transform: translateX(0);
+    }
+
+    .dp-header {
+      padding: 16px 18px;
+      border-bottom: 1.5px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--green-50);
+      flex-shrink: 0;
+    }
+
+    .dp-header-title {
+      font-weight: 700;
+      font-size: 0.92rem;
+      color: var(--green-800);
+    }
+
+    .dp-close {
+      background: transparent;
+      border: 1px solid var(--gray-300);
+      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--gray-500);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .dp-close:hover {
+      background: var(--gray-100);
+      color: var(--gray-800);
+    }
+
+    .dp-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .dp-body::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .dp-body::-webkit-scrollbar-thumb {
+      background: var(--gray-300);
+      border-radius: 99px;
+    }
+
+    /* small detail button inside AI bubble */
+    .btn-detail {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--green-50);
+      border: 1px solid var(--green-200);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: var(--green-800);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .btn-detail:hover {
+      background: var(--green-100);
+      border-color: var(--green-400);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <!-- ── Sidebar ── -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <button class="btn-new-chat" onclick="createNewSession()">
+          <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Đoạn chat mới
+        </button>
+      </div>
+      <div class="session-list" id="session-list">
+        <!-- Sessions injected here -->
+      </div>
+    </div>
+
+    <!-- ── Main Content ── -->
+    <div class="main-content">
+      <div class="header">
+        <div class="header-title">
+          <button class="btn-toggle-sidebar" onclick="toggleSidebar()" title="Thu/mở danh sách chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          AgriRAG
+        </div>
+        <div class="header-actions">
+        </div>
+      </div>
+
+      <!-- ── Right Detail Panel ── -->
+      <div class="dp-overlay" id="dp-overlay" onclick="closeDetail()"></div>
+      <div class="detail-panel" id="detail-panel">
+        <div class="dp-header">
+          <span class="dp-header-title">📋 Chi tiết phân tích</span>
+          <button class="dp-close" onclick="closeDetail()">✕</button>
+        </div>
+        <div class="dp-body" id="dp-body">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <div class="chat-container" id="chat-area">
+        <div id="es" class="empty-state">
+          <div class="empty-icon">🌾</div>
+          <h2>Xin chào! Tôi có thể giúp gì?</h2>
+          <p>Hỏi về bệnh lúa, cây trồng, sâu bệnh, cách phòng trừ và các kiến thức nông nghiệp khác.</p>
+          <div class="chips">
+            <div class="chip" onclick="ask(this)">Bệnh đạo ôn là gì?</div>
+            <div class="chip" onclick="ask(this)">Triệu chứng bệnh khô vằn?</div>
+            <div class="chip" onclick="ask(this)">Cách phòng trị bệnh bạc lá lúa?</div>
+            <div class="chip" onclick="ask(this)">Bệnh lúa von do nguyên nhân gì?</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Input ── -->
+      <div class="input-wrap" style="position: relative;">
+        <div id="img-preview-container" style="display:none; padding: 0 14px 8px;">
+          <div style="position:relative; display:inline-block;">
+            <img id="img-preview" src=""
+              style="height: 60px; border-radius: 6px; border: 1px solid #e2e8f0; object-fit: cover;">
+            <button id="btn-remove-img" onclick="removeImagePreview()"
+              style="position:absolute; top:-8px; right:-8px; background:white; border:1px solid #cbd5e1; border-radius:50%; width:22px; height:22px; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center; color:#ef4444; box-shadow:0 1px 2px rgba(0,0,0,0.1);">✕</button>
+          </div>
+        </div>
+        <div class="input-box">
+          <div class="input-actions">
+            <label class="action-btn" title="Tải tài liệu nền (PDF, TXT) -> Đưa vào DB">
+              <input type="file" id="upload-doc" accept=".pdf,.txt,.docx" hidden onchange="handleUpload(this, 'doc')" />
+              📎
+            </label>
+            <label class="action-btn" title="Chụp ảnh / Tải ảnh bệnh tải lên">
+              <input type="file" id="upload-img" accept="image/*" capture="environment" hidden
+                onchange="handleUpload(this, 'image')" />
+              📷
+            </label>
+          </div>
+          <textarea id="qi" rows="1" placeholder="Đặt câu hỏi về cây trồng, bệnh lúa…"></textarea>
+          <button id="send" title="Gửi (Enter)">
+            <svg viewBox="0 0 24 24">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </div>
+        <div class="input-hint">Enter để gửi · Shift+Enter để xuống dòng</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let busy = false;
+    const EMPTY = document.getElementById('es').outerHTML;
+
+    // Chat History & Session State
+    let currentSessionId = null;
+    let selectedImageFile = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSessions();
+    });
+
+    async function createNewSession() {
+      document.getElementById('chat-area').innerHTML = EMPTY;
+      currentSessionId = null;
+      document.querySelectorAll('.session-item').forEach(e => e.classList.remove('active'));
+    }
+
+    function toggleSidebar() {
+      const sb = document.querySelector('.sidebar');
+      sb.classList.toggle('collapsed');
+      // Save state to localstorage
+      localStorage.setItem('agri_sidebar', sb.classList.contains('collapsed') ? '0' : '1');
+    }
+
+    // Restore sidebar state
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('agri_sidebar');
+      if (saved === '0') document.querySelector('.sidebar').classList.add('collapsed');
+    });
+
+    async function loadSessions() {
+      try {
+        const r = await fetch('/api/sessions');
+        const sessions = await r.json();
+        const list = document.getElementById('session-list');
+        list.innerHTML = '';
+        sessions.forEach(s => {
+          const div = document.createElement('div');
+          div.className = `session-item ${s.id === currentSessionId ? 'active' : ''}`;
+          div.onclick = () => selectSession(s.id, div);
+          div.innerHTML = `
+                   <div class="session-title" title="${esc(s.title)}">${esc(s.title)}</div>
+                   <button class="btn-del-session" onclick="event.stopPropagation(); deleteSession('${s.id}')" title="Xóa">✕</button>
+               `;
+          list.appendChild(div);
+        });
+        if (!currentSessionId && sessions.length > 0) {
+          // Automatically select the most recent session if no session is active
+          selectSession(sessions[0].id, list.firstChild);
+        } else if (!currentSessionId && sessions.length === 0) {
+          // If no sessions exist, ensure empty state is shown
+          document.getElementById('chat-area').innerHTML = EMPTY;
+        }
+      } catch (e) { console.error('Error loading sessions', e); }
+    }
+
+    async function selectSession(sid, element) {
+      if (sid === currentSessionId) return;
+      currentSessionId = sid;
+      document.querySelectorAll('.session-item').forEach(e => e.classList.remove('active'));
+      if (element) element.classList.add('active');
+
+      document.getElementById('chat-area').innerHTML = '';
+      try {
+        const r = await fetch(`/api/sessions/${sid}/messages`);
+        const messages = await r.json();
+        if (messages.length === 0) {
+          document.getElementById('chat-area').innerHTML = EMPTY;
+          return;
+        }
+        messages.forEach(msg => {
+          if (msg.role === 'user') {
+            // Display user message normally, potentially handling img tags if they were saved in the db
+            addUser(msg.content, false);
+          } else if (msg.role === 'ai') {
+            try {
+              const data = JSON.parse(msg.content);
+              renderAnswer(data.result, data.chunks, false);
+            } catch {
+              // Fallback for raw text
+              renderAnswer({ raw: msg.content }, [], false);
+            }
+          }
+        });
+        scrollBot();
+      } catch (e) {
+        addErr('Failed to load session history.');
+      }
+    }
+
+    async function deleteSession(sid) {
+      if (!confirm('Xóa cuộc trò chuyện này?')) return;
+      try {
+        await fetch(`/api/sessions/${sid}`, { method: 'DELETE' });
+        if (sid === currentSessionId) {
+          createNewSession();
+        }
+        loadSessions();
+      } catch (e) { alert('Error deleting session'); }
+    }
+
+    function removeImagePreview() {
+      selectedImageFile = null;
+      document.getElementById('img-preview-container').style.display = 'none';
+      document.getElementById('upload-img').value = '';
+    }
+
+
+    // Top-K (fixed at 5 — best default)
+    const TOP_K = 5;
+
+    // Helpers
+    const area = () => document.getElementById('chat-area');
+    const scrollBot = () => { const a = area(); a.scrollTop = a.scrollHeight; };
+    const removeES = () => document.getElementById('es')?.remove();
+    const esc = s => String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const chunkLabel = c => c.disease_name
+      ? `${c.disease_name} ${c.subsection_name || ''}`.trim()
+      : `${c.source} p.${c.page}`;
+
+    function collapsible(icon, label, body) {
+      return `<div class="section">
+        <div class="sec-head" onclick="toggleSec(this)">
+          <span>${icon} ${label}</span><span class="arrow">▼</span>
+        </div>
+        <div class="sec-body">${body}</div>
+      </div>`;
+    }
+
+    function toggleSec(h) {
+      h.nextElementSibling.classList.toggle('open');
+      h.querySelector('.arrow').classList.toggle('open');
+    }
+
+    // Add messages
+    function addUser(htmlContent, saveToDB = true) {
+      removeES();
+      const d = document.createElement('div');
+      d.className = 'msg user';
+      d.innerHTML = `<div class="av user">Bạn</div><div class="bubble">${htmlContent}</div>`;
+      area().appendChild(d); scrollBot();
+    }
+
+    function addTyping() {
+      const d = document.createElement('div');
+      d.className = 'msg'; d.id = 'tmsg';
+      d.innerHTML = `<div class="av ai">🌾</div><div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+      area().appendChild(d); scrollBot();
+    }
+
+    function addStream() {
+      document.getElementById('tmsg')?.remove();
+      const d = document.createElement('div');
+      d.className = 'msg'; d.id = 'smsg';
+      d.innerHTML = `<div class="av ai">🌾</div><div class="bubble"><span id="stxt"></span><span class="cur"></span></div>`;
+      area().appendChild(d); scrollBot();
+    }
+
+    function appendTok(t) {
+      const el = document.getElementById('stxt');
+      if (!el) return;
+      
+      // Tích lũy token thô vào thuộc tính data-raw
+      const raw = (el.getAttribute('data-raw') || '') + t;
+      el.setAttribute('data-raw', raw);
+      
+      let display = raw;
+      
+      // Nếu là JSON (Stream từ cấu trúc Reasoning)
+      if (raw.trim().startsWith('{')) {
+        // Tìm đoạn text trong "answer": { "text": "..." }
+        // Dùng regex đơn giản để bắt nội dung đang streaming trong nháy kép sau "text":
+        const textMatch = raw.match(/"text":\s*"([^"]*)/);
+        if (textMatch) {
+          // Unescape newline và quote để hiển thị Markdown mượt mà
+          display = textMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        } else {
+          // Nếu chưa thấy field "text", hiển thị trạng thái chờ
+          display = "_🌾 Reasoning..._";
+        }
+      }
+      
+      el.innerHTML = marked.parse(display);
+      scrollBot();
+    }
+
+    // Render answer — chat bubble shows only text; details go in the right panel
+    let _lastDetail = null;
+
+    function openDetail(detailObj) {
+      if (!detailObj) return;
+      const body = document.getElementById('dp-body');
+      const conf = detailObj.conf;
+      const bCls = conf === 'high' ? 'high' : conf === 'medium' ? 'medium' : 'low';
+      const bTxt = conf === 'high' ? '✅ Độ chính xác cao' : conf === 'medium' ? '⚠️ Trung bình' : '❌ Thấp';
+
+      let html = `<div class="conf-row" style="margin-bottom:8px">
+        <span class="badge ${bCls}">${bTxt}</span>
+        <span class="conf-reason">${esc(detailObj.reason)}</span>
+      </div>`;
+
+      // Reasoning
+      const steps = (detailObj.steps || []).map(s => `<div class="step-bubble">${esc(s)}</div>`).join('');
+      let rb = '';
+      if (detailObj.intent) rb += `<div style="margin-bottom:7px;color:var(--gray-600);font-size:.76rem">🎯 ${esc(detailObj.intent)}</div>`;
+      rb += (detailObj.sub_qs || []).map(sq =>
+        `<div><span class="sub-q">Q${sq.id}: ${esc(sq.question)}</span></div>`
+      ).join('');
+      rb += `<div style="margin-top:7px">${steps}</div>`;
+      html += collapsible('🧠', 'Phân tích & Lập luận', rb);
+
+      // Sources
+      const srcChips = (detailObj.sources || []).map(s =>
+        `<span class="src-chip">📑 ${esc(s.document || '?')} ${s.section ? '· ' + esc(s.section) : ''}</span>`
+      ).join('');
+      const cItems = (detailObj.chunks || []).map(c =>
+        `<div class="chunk-item">
+          <div class="chunk-label">score ${c.score} · ${esc(chunkLabel(c))}</div>
+          <div class="chunk-text">${esc((c.text || '').slice(0, 280))}…</div>
+        </div>`
+      ).join('');
+      html += collapsible('📄', 'Nguồn tài liệu',
+        (srcChips || '<span style="color:var(--gray-400);font-size:.74rem">Không có nguồn cụ thể</span>')
+        + '<hr class="sep">' + cItems);
+
+      body.innerHTML = html;
+      // open all sections by default
+      body.querySelectorAll('.sec-body').forEach(b => b.classList.add('open'));
+      body.querySelectorAll('.arrow').forEach(a => a.classList.add('open'));
+
+      document.getElementById('detail-panel').classList.add('open');
+      document.getElementById('dp-overlay').classList.add('open');
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-panel').classList.remove('open');
+      document.getElementById('dp-overlay').classList.remove('open');
+    }
+
+    function renderAnswer(result, chunks, saveToDB = true) {
+      document.getElementById('smsg')?.remove();
+      const wrap = document.createElement('div');
+      wrap.className = 'msg';
+      let h = `<div class="av ai">🌾</div><div class="answer-card">`;
+
+      if (result.raw) {
+        // Nếu là text thô, render markdown trực tiếp
+        h += `<div class="answer-text">${marked.parse(result.raw)}</div>`;
+      } else {
+        const ans = result.answer || {};
+        const ra = result.reasoning || {};
+        const qa = result.query_analysis || {};
+        const conf = ans.overall_confidence || 'low';
+
+        // Lấy text chính xác nhất có thể (đề phòng LLM nhả cấu trúc sai)
+        const finalText = ans.text || result.text || result.raw || "Hệ thống không trích xuất được câu trả lời.";
+
+        h += `<div class="answer-text">${marked.parse(finalText)}</div>`;
+
+        // store detail for the panel
+        const detailId = 'detail_' + Date.now();
+        _lastDetail = {
+          conf, reason: ans.confidence_reason || '',
+          intent: qa.intent, sub_qs: qa.sub_questions || [],
+          steps: ra.steps || [], sources: ans.sources || [], chunks
+        };
+        const snapshot = JSON.parse(JSON.stringify(_lastDetail));
+        h += `<button class="btn-detail" onclick='openDetail(${JSON.stringify(snapshot).replace(/'/g, "&#39;")})'>
+          📂 Xem chi tiết phân tích
+        </button>`;
+      }
+
+      h += '</div>';
+      wrap.innerHTML = h;
+      area().appendChild(wrap); scrollBot();
+    }
+
+    function addErr(msg) {
+      document.getElementById('tmsg')?.remove();
+      document.getElementById('smsg')?.remove();
+      const d = document.createElement('div');
+      d.className = 'msg';
+      d.innerHTML = `<div class="av ai">🌾</div><div class="err-bubble">❌ ${esc(msg)}</div>`;
+      area().appendChild(d); scrollBot();
+    }
+
+    // Send
+    async function sendMsg(q) {
+      q = q.trim();
+      const hasImage = !!selectedImageFile;
+      if (busy || (!q && !hasImage)) return;
+      busy = true;
+      document.getElementById('send').disabled = true;
+      document.getElementById('qi').value = '';
+      document.getElementById('img-preview-container').style.display = 'none';
+      resize();
+
+      let userHtml = '';
+      if (hasImage) {
+        const url = document.getElementById('img-preview').src;
+        userHtml += `<img src="${url}" style="max-height:160px; border-radius:8px; margin-bottom:8px; display:block; border:1px solid #cbd5e1; object-fit:contain;">`;
+      }
+      if (q) userHtml += esc(q);
+
+      addUser(userHtml);
+      addTyping();
+
+      try {
+        if (hasImage) {
+          const formData = new FormData();
+          formData.append("file", selectedImageFile);
+          const r = await fetch('/api/upload-image', { method: 'POST', body: formData });
+          if (!r.ok) {
+            addErr("Lỗi chuẩn đoán ảnh!");
+            busy = false; document.getElementById('send').disabled = false;
+            return;
+          }
+          const imgData = await r.json();
+          // Show timing + top-3 confidence in the typing bubble
+          const timingEl = document.getElementById('tmsg')?.querySelector('.bubble');
+          if (timingEl) {
+            const top3 = imgData.top3 || [];
+            const lowConf = imgData.low_confidence;
+            let html = '';
+            if (imgData.inference_time_s != null) {
+              html += `<div style="margin-bottom:6px;font-size:0.72rem;color:var(--green-700);background:var(--green-50);border:1px solid var(--green-200);border-radius:20px;padding:2px 10px;display:inline-block;">⏱ Thời gian nhận diện: ${imgData.inference_time_s.toFixed(2)}s</div>`;
+            }
+            if (top3.length > 0) {
+              const showAll = lowConf;
+              const displayList = showAll ? top3 : top3.slice(0,1);
+              const title = lowConf
+                ? '⚠️ <b>Độ tin cậy thấp</b> — Kết quả tham khảo top-3:'
+                : '🔬 <b>Kết quả nhận diện:</b>';
+              html += `<div style="margin-top:6px;font-size:0.78rem;">${title}</div>`;
+              displayList.forEach((c, idx) => {
+                const pct = (c.confidence * 100).toFixed(1);
+                const barColor = idx === 0 ? 'var(--green-600)' : (idx === 1 ? '#f59e0b' : '#94a3b8');
+                html += `<div style="margin-top:5px;">
+                  <div style="font-size:0.74rem;font-weight:600;color:var(--gray-700);">#${idx+1} ${esc(c.vietnamese_label)} <span style="color:var(--gray-400);font-weight:400;">(${pct}%)</span></div>
+                  <div style="background:var(--gray-200);border-radius:99px;height:6px;margin-top:2px;">
+                    <div style="background:${barColor};width:${pct}%;height:6px;border-radius:99px;transition:width 0.4s;"></div>
+                  </div>
+                </div>`;
+              });
+            }
+            timingEl.insertAdjacentHTML('beforeend', html);
+          }
+          selectedImageFile = null;
+        }
+
+
+        let finalQ = q;
+        if (hasImage && !q) {
+            finalQ = "Hãy chẩn đoán bệnh từ ảnh này, mô tả nguyên nhân, triệu chứng và đưa ra biện pháp phòng trừ/điều trị chi tiết.";
+        } else if (!q) {
+            finalQ = "Xin chào";
+        }
+
+        const isNewSession = currentSessionId === null;
+        if (isNewSession) {
+          const cr = await fetch('/api/sessions', { method: 'POST' });
+          if (!cr.ok) {
+            addErr(`Không thể tạo phiên chat mới (lỗi ${cr.status}). Vui lòng thử lại.`);
+            busy = false; document.getElementById('send').disabled = false;
+            return;
+          }
+          let crData;
+          try { crData = await cr.json(); } catch {
+            addErr('Lỗi máy chủ: phản hồi tạo session không hợp lệ.');
+            busy = false; document.getElementById('send').disabled = false;
+            return;
+          }
+          currentSessionId = crData.session_id;
+        }
+
+        const resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: finalQ,
+            top_k: 8,
+            session_id: currentSessionId,
+            is_new_session: isNewSession
+          }),
+        });
+        if (!resp.ok) { addErr(`Server: ${resp.status}`); return; }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '', started = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            let ev;
+            try { ev = JSON.parse(raw); } catch { continue; }
+
+            if (ev.type === 'chunk') {
+              if (!started) { addStream(); started = true; }
+              appendTok(ev.text);
+            } else if (ev.type === 'done') {
+              renderAnswer(ev.result, ev.chunks || []);
+              if (isNewSession) loadSessions(); // Refresh sidebar to show new chat 
+            } else if (ev.type === 'error') {
+              addErr(ev.message);
+            }
+          }
+        }
+      } catch (e) {
+        addErr('Lỗi kết nối: ' + e.message);
+      } finally {
+        busy = false;
+        document.getElementById('send').disabled = false;
+        document.getElementById('qi').focus();
+      }
+    }
+
+    function ask(el) { sendMsg(el.textContent); }
+
+    // Auto-resize textarea
+    const qi = document.getElementById('qi');
+    function resize() {
+      qi.style.height = 'auto';
+      qi.style.height = Math.min(qi.scrollHeight, 130) + 'px';
+    }
+    qi.addEventListener('input', resize);
+    qi.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(qi.value); }
+    });
+    document.getElementById('send').addEventListener('click', () => sendMsg(qi.value));
+
+    // Toast helper
+    function showToast(msg, isError = false) {
+      let t = document.getElementById('_toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = '_toast';
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+          'background:#1e293b;color:#fff;padding:9px 20px;border-radius:20px;font-size:0.8rem;' +
+          'z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:opacity 0.3s;pointer-events:none;';
+        document.body.appendChild(t);
+      }
+      t.style.background = isError ? '#991b1b' : '#166534';
+      t.textContent = msg;
+      t.style.opacity = '1';
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2800);
+    }
+
+    // Upload Handler
+    async function handleUpload(input, type) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+
+      if (type === 'image') {
+        selectedImageFile = file;
+        document.getElementById('img-preview').src = URL.createObjectURL(file);
+        document.getElementById('img-preview-container').style.display = 'block';
+        input.value = '';
+        return;
+      }
+
+      showToast(`⏳ Đang xử lý ${file.name}…`);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const r = await fetch('/api/upload-doc', { method: 'POST', body: formData });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(`❌ ${data.error || 'Upload thất bại'}`, true);
+        } else {
+          showToast(`✅ Đã thêm tài liệu thành công`);
+        }
+      } catch (e) {
+        showToast(`❌ Lỗi: ${e.message}`, true);
+      }
+
+      input.value = '';
+    }
+  </script>
+</body>
+
+</html>

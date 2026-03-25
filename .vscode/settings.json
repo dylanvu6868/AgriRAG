@@ -1,0 +1,12 @@
+{
+    "liveServer.settings.port": 5502,
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.venvPath": "${workspaceFolder}",
+    "python.analysis.venv": ".venv",
+    "pyre.enablePyre": false,
+    "python.linting.enabled": false
+}

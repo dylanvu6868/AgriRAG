@@ -1,0 +1,13 @@
+﻿fastapi
+uvicorn
+groq
+python-dotenv
+faiss-cpu
+sentence-transformers
+pyvi
+rank-bm25
+PyMuPDF
+python-multipart
+Pillow
+typing-extensions
+tensorflow
