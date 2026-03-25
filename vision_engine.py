@@ -23,8 +23,11 @@ try:
     print("TFLite Model loaded successfully.")
     is_loaded = True
 except Exception as e:
-    print(f"Error loading TFLite model: {e}")
+    import traceback
+    err_str = traceback.format_exc()
+    print(f"Error loading TFLite model: {err_str}")
     is_loaded = False
+    load_err = err_str
     interpreter = None
 
 CLASS_NAMES = [
@@ -62,7 +65,7 @@ def _enhance_image(img: Image.Image) -> Image.Image:
 
 def predict_disease(image_bytes: bytes) -> dict:
     if not is_loaded:
-        return {"error": "Vision model is not loaded."}
+        return {"error": f"Vision model is not loaded. Details: {load_err}"}
 
     try:
         IMG_SIZE = 224  # EfficientNet B0 standard size (or matching your training. TFLite converted model typically expects 224x224 or 380x380 depending on what was frozen. Let's dynamically read from input_details)
